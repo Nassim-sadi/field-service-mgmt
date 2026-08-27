@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+db.sqlite3
+*.log
+
+# Django
+backend/media/
+backend/staticfiles/
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+dist/
+build/
+frontend/.vite/
+*.local
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local agent behavior (not part of the project)
+AGENTS.md
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
