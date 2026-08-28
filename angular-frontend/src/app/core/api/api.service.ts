@@ -1,8 +1,9 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = environment.apiUrl;
 
 export interface ListParams {
   page?: number;

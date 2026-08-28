@@ -33,7 +33,7 @@ let refreshing: Promise<string> | null = null
 async function refreshAccessToken(): Promise<string> {
   const refresh = tokenStore.getRefresh()
   if (!refresh) throw new Error('No refresh token')
-  const { data } = await axios.post('http://localhost:8000/api/auth/token/refresh/', {
+  const { data } = await axios.post(`${api.defaults.baseURL}/auth/token/refresh/`, {
     refresh,
   })
   tokenStore.set(data.access, refresh)
