@@ -12,6 +12,7 @@ import { PartsPage } from '@/pages/admin/parts'
 import { WorkOrdersPage } from '@/pages/admin/work-orders'
 import { ServiceReportsPage } from '@/pages/admin/service-reports'
 import { UsersPage } from '@/pages/admin/users'
+import { AccountPage } from '@/pages/admin/account'
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="work-orders" element={<WorkOrdersPage />} />
           <Route path="service-reports" element={<ServiceReportsPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="account" element={<AccountPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

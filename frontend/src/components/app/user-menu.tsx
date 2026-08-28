@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { LogOut, Settings } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -40,12 +41,23 @@ export function UserMenu() {
           <AvatarFallback>{initials(displayName) || user?.username?.[0]}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuLabel>
-          <div className="font-medium">{displayName}</div>
-          {user && <RoleBadge role={user.role} />}
-        </DropdownMenuLabel>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <div className="font-medium">{displayName}</div>
+            {user?.email && (
+              <div className="truncate text-xs font-normal text-muted-foreground">
+                {user.email}
+              </div>
+            )}
+            {user && <RoleBadge role={user.role} />}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate('/admin/account')}>
+          <Settings />
+          Account settings
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => {
             logout()
