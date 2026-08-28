@@ -8,6 +8,7 @@ import { ApiService, apiErrorMessage } from '../../core/api/api.service';
 import { pagedList } from '../../core/paged-list';
 import { Company, Customer, Paginated } from '../../core/api/types';
 import { DEMO_MODE } from '../../core/demo';
+import { tokenStore } from '../../core/api/token-store';
 import {
   ButtonDirective,
   CardComponent,
@@ -423,7 +424,12 @@ export class CustomersComponent {
 
   async exportFile(fmt: 'csv' | 'xlsx'): Promise<void> {
     try {
-      const blob: any = await lastValueFrom(this.api.get<Blob>(`/customers/export/?format=${fmt}`, { responseType: 'blob' } as any));
+      const token = tokenStore.getAccess();
+      const res = await fetch(`${this.api.baseUrl()}/customers/export/?fmt=${fmt}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

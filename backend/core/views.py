@@ -165,7 +165,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], permission_classes=[IsManagement])
     def export(self, request):
-        fmt = request.query_params.get("format", "csv")
+        import logging
+        import psutil
+        import os
+
+        logger = logging.getLogger(__name__)
+        proc = psutil.Process(os.getpid())
+        rss_before = proc.memory_info().rss / 1024**2
+        fmt = request.query_params.get("fmt", request.query_params.get("format", "csv"))
         qs = self.filter_queryset(self.get_queryset()).select_related("company").only("name", "email", "phone", "address", "company__name").iterator(chunk_size=500)
 
         if fmt == "xlsx":
@@ -183,6 +190,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
             buf.seek(0)
             resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
+            rss_after = proc.memory_info().rss / 1024**2
+            logger.info(f"export customers fmt={fmt} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB rows buffered")
             return resp
 
         def gen():
@@ -195,6 +204,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         resp = StreamingHttpResponse(gen(), content_type="text/csv")
         resp["Content-Disposition"] = 'attachment; filename="customers.csv"'
+        rss_after = proc.memory_info().rss / 1024**2
+        logger.info(f"export customers fmt={fmt} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB")
         return resp
 
 

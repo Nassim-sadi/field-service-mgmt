@@ -66,7 +66,7 @@ export function CustomerImportDialog() {
 
   const onExport = async (fmt: 'csv' | 'xlsx') => {
     try {
-      const res = await api.get(`/customers/export/?format=${fmt}`, { responseType: 'blob' })
+      const res = await api.get(`/customers/export/?fmt=${fmt}`, { responseType: 'blob' })
       const blob = res.data as unknown as Blob
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
