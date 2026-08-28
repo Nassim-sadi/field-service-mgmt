@@ -55,10 +55,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
+_DB_ENGINE = os.environ.get("DB_ENGINE", "postgres")
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "fieldservice"),
+        "ENGINE": {
+            "sqlite": "django.db.backends.sqlite3",
+            "postgres": "django.db.backends.postgresql",
+        }.get(_DB_ENGINE, "django.db.backends.postgresql"),
+        "NAME": os.environ.get("DB_NAME", str(BASE_DIR / "db.sqlite3") if _DB_ENGINE == "sqlite" else "fieldservice"),
         "USER": os.environ.get("DB_USER", "fieldservice"),
         "PASSWORD": os.environ.get("DB_PASSWORD", "fieldservice_dev_pass"),
         "HOST": os.environ.get("DB_HOST", "localhost"),
