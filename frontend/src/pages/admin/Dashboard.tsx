@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Bar,
@@ -12,6 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
+import L from 'leaflet'
 import { api } from '@/lib/api/client'
 import { queryKeys } from '@/lib/api/keys'
 import type {
@@ -20,6 +22,7 @@ import type {
   OverTimeRow,
   PartsConsumption,
   Paginated,
+  Site,
   Sla,
   Technician,
   WorkloadRow,
@@ -27,6 +30,23 @@ import type {
 import { PageHeader } from '@/components/app/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+
+const techIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+})
+const siteIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+})
 
 const statusColors: Record<string, string> = {
   new: '#3b82f6',
@@ -52,6 +72,12 @@ export function Dashboard() {
     queryKey: queryKeys.technicians,
     queryFn: async () => (await api.get<Paginated<Technician>>('/technicians/')).data.results,
   })
+  const { data: sites } = useQuery({
+    queryKey: queryKeys.sites,
+    queryFn: async () => (await api.get<Paginated<Site>>('/sites/')).data.results,
+  })
+  const [showTechs, setShowTechs] = useState(true)
+  const [showSites, setShowSites] = useState(true)
 
   const s = stats.data
 
@@ -179,7 +205,19 @@ export function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Field technicians</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Field map</CardTitle>
+              <div className="flex items-center gap-3 text-xs">
+                <label className="flex items-center gap-1.5">
+                  <input type="checkbox" checked={showTechs} onChange={(e) => setShowTechs(e.target.checked)} />
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Technicians
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input type="checkbox" checked={showSites} onChange={(e) => setShowSites(e.target.checked)} />
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-500" /> Sites
+                </label>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="h-72 overflow-hidden rounded-md">
             <MapContainer
@@ -192,23 +230,41 @@ export function Dashboard() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {(technicians ?? [])
-                .filter((tech) => tech.latitude != null && tech.longitude != null)
-                .map((tech) => (
-                  <Marker
-                    key={tech.id}
-                    position={[Number(tech.latitude), Number(tech.longitude)]}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        <div className="font-medium">{tech.full_name || tech.username}</div>
-                        <div className="text-muted-foreground">
-                          {tech.open_work_orders} open order(s)
+              {showTechs &&
+                (technicians ?? [])
+                  .filter((tech) => tech.latitude != null && tech.longitude != null)
+                  .map((tech) => (
+                    <Marker
+                      key={`tech-${tech.id}`}
+                      position={[Number(tech.latitude), Number(tech.longitude)]}
+                      icon={techIcon}
+                    >
+                      <Popup>
+                        <div className="text-sm">
+                          <div className="font-medium">{tech.full_name || tech.username}</div>
+                          <div className="text-muted-foreground">{tech.specialty}</div>
+                          <div className="text-muted-foreground">{tech.open_work_orders} open order(s)</div>
                         </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                      </Popup>
+                    </Marker>
+                  ))}
+              {showSites &&
+                (sites ?? [])
+                  .filter((site) => site.latitude != null && site.longitude != null)
+                  .map((site) => (
+                    <Marker
+                      key={`site-${site.id}`}
+                      position={[Number(site.latitude), Number(site.longitude)]}
+                      icon={siteIcon}
+                    >
+                      <Popup>
+                        <div className="text-sm">
+                          <div className="font-medium">{site.name}</div>
+                          <div className="text-muted-foreground">{site.address}</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
             </MapContainer>
           </CardContent>
         </Card>

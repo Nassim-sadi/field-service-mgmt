@@ -1,4 +1,5 @@
-import { AfterViewInit, Component, ElementRef, effect, viewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, effect, signal, viewChild } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { BaseChartDirective } from 'ng2-charts';
 import type { ChartData, ChartOptions } from 'chart.js';
 import * as L from 'leaflet';
@@ -11,6 +12,7 @@ import {
   OverTimeRow,
   Paginated,
   PartsConsumption,
+  Site,
   Sla,
   Technician,
   WorkloadRow,
@@ -58,9 +60,27 @@ const doughnutOptions: ChartOptions = {
   plugins: { legend: { position: 'bottom' } },
 };
 
+const techIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+const siteIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
 @Component({
   selector: 'app-dashboard',
   imports: [
+    FormsModule,
     PageHeaderComponent,
     CardComponent,
     CardHeaderComponent,
@@ -156,7 +176,19 @@ const doughnutOptions: ChartOptions = {
 
         <app-card>
           <app-card-header>
-            <app-card-title>Field technicians</app-card-title>
+            <div class="flex items-center justify-between gap-2">
+              <app-card-title>Field map</app-card-title>
+              <div class="flex items-center gap-3 text-xs">
+                <label class="flex items-center gap-1.5">
+                  <input type="checkbox" [checked]="showTechs()" (change)="showTechs.set(!showTechs())" />
+                  <span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span> Technicians
+                </label>
+                <label class="flex items-center gap-1.5">
+                  <input type="checkbox" [checked]="showSites()" (change)="showSites.set(!showSites())" />
+                  <span class="h-2.5 w-2.5 rounded-full bg-red-500"></span> Sites
+                </label>
+              </div>
+            </div>
           </app-card-header>
           <app-card-content class="h-72 overflow-hidden rounded-md">
             <div class="h-72 w-full" #mapContainer></div>
@@ -174,6 +206,11 @@ export class DashboardComponent implements AfterViewInit {
   readonly mapContainer = viewChild<ElementRef<HTMLDivElement>>('mapContainer');
 
   private map: L.Map | null = null;
+  private techLayer: L.LayerGroup | null = null;
+  private siteLayer: L.LayerGroup | null = null;
+
+  protected showTechs = signal(true);
+  protected showSites = signal(true);
 
   protected stats = injectQuery(() => ({
     queryKey: ['dashboard', 'stats'],
@@ -203,15 +240,22 @@ export class DashboardComponent implements AfterViewInit {
     queryKey: ['technicians'],
     queryFn: () => lastValueFrom(this.api.get<Paginated<Technician>>('/technicians/')),
   }));
+  protected sites = injectQuery(() => ({
+    queryKey: ['sites'],
+    queryFn: () => lastValueFrom(this.api.get<Paginated<Site>>('/sites/')),
+  }));
 
   readonly Map = Map;
   readonly Math = Math;
 
   constructor(private api: ApiService) {
     effect(() => {
-      const data = this.technicians.data();
-      if (this.map && data) {
-        this.renderMarkers(data.results);
+      const techs = this.technicians.data()?.results ?? [];
+      const sites = this.sites.data()?.results ?? [];
+      const showTechs = this.showTechs();
+      const showSites = this.showSites();
+      if (this.map) {
+        this.renderMarkers(techs, sites, showTechs, showSites);
       }
     });
   }
@@ -223,21 +267,39 @@ export class DashboardComponent implements AfterViewInit {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(this.map);
-    const data = this.technicians.data();
-    if (data) this.renderMarkers(data.results);
+    this.techLayer = L.layerGroup().addTo(this.map);
+    this.siteLayer = L.layerGroup().addTo(this.map);
+    const techs = this.technicians.data()?.results ?? [];
+    const sites = this.sites.data()?.results ?? [];
+    this.renderMarkers(techs, sites, this.showTechs(), this.showSites());
   }
 
-  private renderMarkers(techs: Technician[]): void {
-    if (!this.map) return;
-    techs
-      .filter((tech) => tech.latitude != null && tech.longitude != null)
-      .forEach((tech) => {
-        L.marker([Number(tech.latitude), Number(tech.longitude)])
-          .addTo(this.map!)
-          .bindPopup(
-            `<div class="text-sm"><div class="font-medium">${tech.full_name || tech.username}</div><div>${tech.open_work_orders} open order(s)</div></div>`,
-          );
-      });
+  private renderMarkers(techs: Technician[], sites: Site[], showTechs: boolean, showSites: boolean): void {
+    if (!this.map || !this.techLayer || !this.siteLayer) return;
+    this.techLayer.clearLayers();
+    this.siteLayer.clearLayers();
+    if (showTechs) {
+      techs
+        .filter((tech) => tech.latitude != null && tech.longitude != null)
+        .forEach((tech) => {
+          L.marker([Number(tech.latitude), Number(tech.longitude)], { icon: techIcon })
+            .addTo(this.techLayer!)
+            .bindPopup(
+              `<div class="text-sm"><div class="font-medium">${tech.full_name || tech.username}</div><div>${tech.specialty ?? ''}</div><div>${tech.open_work_orders} open order(s)</div></div>`,
+            );
+        });
+    }
+    if (showSites) {
+      sites
+        .filter((site) => site.latitude != null && site.longitude != null)
+        .forEach((site) => {
+          L.marker([Number(site.latitude), Number(site.longitude)], { icon: siteIcon })
+            .addTo(this.siteLayer!)
+            .bindPopup(
+              `<div class="text-sm"><div class="font-medium">${site.name}</div><div>${site.address ?? ''}</div></div>`,
+            );
+        });
+    }
   }
 
   get statCards(): { label: string; value: () => number | undefined }[] {
