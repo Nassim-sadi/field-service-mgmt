@@ -48,7 +48,7 @@ import { sharedUi } from '../../shared/ui';
 })
 export class LoginComponent {
   protected readonly submitting = signal(false);
-  protected form = { username: '', password: '' };
+  protected form = { username: 'admin', password: 'adminpass123' };
 
   private auth = inject(AuthService);
   private router = inject(Router);

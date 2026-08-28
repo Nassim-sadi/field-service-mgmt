@@ -22,7 +22,7 @@ export function Login() {
   const [submitting, setSubmitting] = useState(false)
 
   const { register, handleSubmit } = useForm<LoginFormValues>({
-    defaultValues: { username: '', password: '' },
+    defaultValues: { username: 'admin', password: 'adminpass123' },
   })
 
   const onSubmit: SubmitHandler<LoginFormValues> = async (values) => {
