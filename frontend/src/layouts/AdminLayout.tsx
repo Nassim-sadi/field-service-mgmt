@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/s
 import { Separator } from '@/components/ui/separator'
 import { AppSidebar } from '@/components/app/app-sidebar'
 import { UserMenu } from '@/components/app/user-menu'
+import { DEMO_MODE } from '@/lib/demo'
 
 export function AdminLayout() {
   return (
@@ -16,6 +17,11 @@ export function AdminLayout() {
             <UserMenu />
           </div>
         </header>
+        {DEMO_MODE && (
+          <div className="bg-yellow-500 px-4 py-2 text-center text-sm font-medium text-black">
+            Demo mode — edits are local only, refresh restores original data.
+          </div>
+        )}
         <div className="flex-1 space-y-4 overflow-auto p-4 lg:p-6">
           <Outlet />
         </div>

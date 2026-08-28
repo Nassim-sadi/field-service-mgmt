@@ -3,6 +3,7 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { NgIcon } from '@ng-icons/core';
 import { AuthService } from '../../core/auth/auth.service';
 import { RoleBadgeComponent } from '../../shared/status-badge';
+import { DEMO_MODE } from '../../core/demo';
 
 interface NavItem {
   to: string;
@@ -133,6 +134,11 @@ const inventoryNav: NavItem[] = [{ to: '/admin/parts', label: 'Parts', icon: 'pa
           </div>
         </header>
 
+        @if (demoMode) {
+          <div class="bg-yellow-500 px-4 py-2 text-center text-sm font-medium text-black">
+            Demo mode — edits are local only, refresh restores original data.
+          </div>
+        }
         <main class="flex-1 space-y-4 overflow-auto p-4 lg:p-6">
           <router-outlet></router-outlet>
         </main>
@@ -144,6 +150,7 @@ export class AdminLayoutComponent {
   protected readonly managementNav = managementNav;
   protected readonly serviceNav = serviceNav;
   protected readonly menuOpen = signal(false);
+  protected readonly demoMode = DEMO_MODE;
 
   constructor(
     private auth: AuthService,
