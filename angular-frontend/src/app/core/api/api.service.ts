@@ -42,7 +42,7 @@ export class ApiService {
       }
     }
     const obs = this.http.get<T>(`${this.apiBase}${path}`, { params: httpParams });
-    if (!DEMO_MODE) return obs;
+    if (!DEMO_MODE || path.includes('/auth/') || path.includes('/users/me')) return obs;
     const key = this.demoKey(path);
     return obs.pipe(
       map((data: any) => {
@@ -69,7 +69,7 @@ export class ApiService {
   }
 
   post<T>(path: string, body?: unknown): Observable<T> {
-    if (!DEMO_MODE) return this.http.post<T>(`${this.apiBase}${path}`, body ?? {});
+    if (!DEMO_MODE || path.includes('/auth/')) return this.http.post<T>(`${this.apiBase}${path}`, body ?? {});
     const key = this.demoKey(path);
     const ov = this.getDemoOverlay(key);
     const fake: any = {
@@ -83,7 +83,7 @@ export class ApiService {
   }
 
   patch<T>(path: string, body?: unknown): Observable<T> {
-    if (!DEMO_MODE) return this.http.patch<T>(`${this.apiBase}${path}`, body ?? {});
+    if (!DEMO_MODE || path.includes('/auth/')) return this.http.patch<T>(`${this.apiBase}${path}`, body ?? {});
     const key = this.demoKey(path);
     const ov = this.getDemoOverlay(key);
     const id = this.demoId(path);
@@ -96,12 +96,12 @@ export class ApiService {
   }
 
   put<T>(path: string, body?: unknown): Observable<T> {
-    if (!DEMO_MODE) return this.http.put<T>(`${this.apiBase}${path}`, body ?? {});
+    if (!DEMO_MODE || path.includes('/auth/')) return this.http.put<T>(`${this.apiBase}${path}`, body ?? {});
     return this.patch<T>(path, body);
   }
 
   delete(path: string): Observable<void> {
-    if (!DEMO_MODE) return this.http.delete<void>(`${this.apiBase}${path}`);
+    if (!DEMO_MODE || path.includes('/auth/')) return this.http.delete<void>(`${this.apiBase}${path}`);
     const key = this.demoKey(path);
     const ov = this.getDemoOverlay(key);
     const id = this.demoId(path);

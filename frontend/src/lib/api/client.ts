@@ -91,6 +91,7 @@ if (DEMO_MODE) {
 
   api.get = async (url: string, config?: unknown) => {
     const res: any = await origGet(url, config as never)
+    if (url.includes('/auth/') || url.includes('/users/me')) return res
     const key = resourceKey(url)
     const ov = overlays.get(key)
     if (!ov || (!ov.created.length && !ov.updated.size && !ov.deleted.size)) return res
@@ -118,6 +119,7 @@ if (DEMO_MODE) {
   }
 
   api.post = async (url: string, body?: unknown) => {
+    if (url.includes('/auth/')) return origPost(url, body as never) as never
     const key = resourceKey(url)
     const ov = getOverlay(key)
     const fake: Record<string, unknown> = {
@@ -131,6 +133,7 @@ if (DEMO_MODE) {
   }
 
   api.patch = async (url: string, body?: unknown) => {
+    if (url.includes('/auth/')) return origPatch(url, body as never) as never
     const key = resourceKey(url)
     const ov = getOverlay(key)
     const id = idFromUrl(url)
@@ -146,6 +149,7 @@ if (DEMO_MODE) {
   }
 
   api.delete = async (url: string) => {
+    if (url.includes('/auth/')) return origDelete(url) as never
     const key = resourceKey(url)
     const ov = getOverlay(key)
     const id = idFromUrl(url)
