@@ -1,0 +1,14 @@
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*.egg-info
+media
+staticfiles
+*.sqlite3
+*.log
+.env
+.dockerignore
+Dockerfile
+docker-compose.yml
