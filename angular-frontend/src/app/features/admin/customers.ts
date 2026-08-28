@@ -7,6 +7,7 @@ import { lastValueFrom } from 'rxjs';
 import { ApiService, apiErrorMessage } from '../../core/api/api.service';
 import { pagedList } from '../../core/paged-list';
 import { Company, Customer, Paginated } from '../../core/api/types';
+import { DEMO_MODE } from '../../core/demo';
 import {
   ButtonDirective,
   CardComponent,
@@ -83,10 +84,44 @@ const fromCustomer = (c: Customer): CustomerForm => ({
   template: `
     <div class="space-y-4">
       <app-page-header title="Customers" description="Manage customer accounts">
-        <button appButton (click)="openCreate()">
-          <ng-icon name="plus" size="16" /> Add customer
-        </button>
+        <div class="flex items-center gap-2">
+          <button appButton variant="outline" (click)="exportFile('csv')">Export CSV</button>
+          <button appButton variant="outline" (click)="exportFile('xlsx')">Export XLSX</button>
+          <button appButton variant="outline" (click)="importOpen.set(true)">
+            <ng-icon name="upload" size="16" /> Import
+          </button>
+          <button appButton (click)="openCreate()">
+            <ng-icon name="plus" size="16" /> Add customer
+          </button>
+        </div>
       </app-page-header>
+
+      @if (importOpen()) {
+        <app-dialog [open]="importOpen()" (close)="importOpen.set(false)">
+          <div appDialogTitle>Import customers</div>
+          <div appDialogDesc>CSV or XLSX with headers: company, name, email, phone, address. Company resolved by name.</div>
+          <div appDialogContent class="space-y-4">
+            <div class="space-y-2">
+              <label appLabel>File (.csv, .xlsx)</label>
+              <input type="file" accept=".csv,.xlsx,.xls" (change)="onImportFile($event)" />
+            </div>
+            <div class="space-y-2">
+              <label appLabel>On duplicate (email + company)</label>
+              <select appSelect [(ngModel)]="importMode">
+                <option value="skip">Skip</option>
+                <option value="overwrite">Overwrite</option>
+              </select>
+            </div>
+            @if (demoMode) {
+              <p class="text-xs text-muted-foreground">Demo — import disabled on Netlify.</p>
+            }
+          </div>
+          <div appDialogFooter class="justify-end gap-2">
+            <button appButton variant="outline" type="button" (click)="importOpen.set(false)">Cancel</button>
+            <button appButton [disabled]="!importFile || demoMode" (click)="doImport()">Import</button>
+          </div>
+        </app-dialog>
+      }
 
       <app-card>
         <app-card-content class="pt-6">
@@ -268,6 +303,10 @@ export class CustomersComponent {
   protected editCustomer = signal<Customer | null>(null);
   protected detailsCustomer = signal<Customer | null>(null);
   protected form: CustomerForm = emptyForm();
+  protected importOpen = signal(false);
+  protected importFile: File | null = null;
+  protected importMode: 'skip' | 'overwrite' = 'skip';
+  protected readonly demoMode = DEMO_MODE;
 
   protected list = pagedList<Customer>({
     url: '/customers/',
@@ -355,5 +394,44 @@ export class CustomersComponent {
 
   saveEdit(): void {
     this.editMutation.mutate();
+  }
+
+  onImportFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.importFile = input.files?.[0] ?? null;
+  }
+
+  async doImport(): Promise<void> {
+    if (DEMO_MODE) {
+      this.toast.error('Demo — import disabled on Netlify');
+      return;
+    }
+    if (!this.importFile) return;
+    const fd = new FormData();
+    fd.append('file', this.importFile);
+    fd.append('on_duplicate', this.importMode);
+    try {
+      const res: any = await lastValueFrom(this.api.post('/customers/import/', fd));
+      this.toast.success(`Imported ${res.imported}, overwritten ${res.overwritten}, skipped ${res.skipped}, failed ${res.failed}`);
+      this.queryClient.invalidateQueries({ queryKey: ['customers'] });
+      this.importOpen.set(false);
+      this.importFile = null;
+    } catch (error) {
+      this.toast.error(apiErrorMessage(error));
+    }
+  }
+
+  async exportFile(fmt: 'csv' | 'xlsx'): Promise<void> {
+    try {
+      const blob: any = await lastValueFrom(this.api.get<Blob>(`/customers/export/?format=${fmt}`, { responseType: 'blob' } as any));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `customers.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.toast.error(apiErrorMessage(error));
+    }
   }
 }

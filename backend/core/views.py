@@ -1,7 +1,13 @@
+import csv
+import io
+
+from django.db import transaction
 from django.db.models import Avg, Count, Sum
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from .models import (
@@ -49,6 +55,147 @@ class CustomerViewSet(viewsets.ModelViewSet):
         customer = self.get_object()
         serializer = SiteSerializer(customer.sites.all(), many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser], permission_classes=[IsManagement])
+    def import_csv(self, request):
+        if "netlify.app" in request.META.get("HTTP_ORIGIN", "") or "netlify.app" in request.META.get("HTTP_REFERER", ""):
+            return Response({"detail": "Demo — import disabled on Netlify"}, status=status.HTTP_403_FORBIDDEN)
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+        on_duplicate = request.data.get("on_duplicate", "skip")
+        if on_duplicate not in ("skip", "overwrite"):
+            on_duplicate = "skip"
+        name = file.name.lower()
+        is_csv = name.endswith(".csv")
+        is_xlsx = name.endswith(".xlsx") or name.endswith(".xls")
+        if not (is_csv or is_xlsx):
+            return Response({"detail": "Only .csv and .xlsx supported"}, status=status.HTTP_400_BAD_REQUEST)
+
+        def normalize(h: str) -> str:
+            h = h.strip().lower()
+            aliases = {"société": "company", "societe": "company", "téléphone": "phone", "telephone": "phone", "adresse": "address", "nom": "name"}
+            return aliases.get(h, h)
+
+        expected = {"company", "name", "email"}
+        headers: list[str] = []
+        rows_iter = None
+        errors: list[dict] = []
+
+        try:
+            if is_csv:
+                text = io.TextIOWrapper(file, encoding="utf-8-sig")
+                reader = csv.DictReader(text)
+                if reader.fieldnames is None:
+                    return Response({"detail": "Empty file or missing header"}, status=status.HTTP_400_BAD_REQUEST)
+                headers = [normalize(h) for h in reader.fieldnames]
+                if not expected.issubset(set(headers)):
+                    return Response({"detail": f"Missing headers: {', '.join(expected - set(headers))}", "expected": sorted(expected)}, status=status.HTTP_400_BAD_REQUEST)
+
+                def gen_csv():
+                    for idx, row in enumerate(reader, start=2):
+                        norm = {normalize(k): (v.strip() if isinstance(v, str) else v) for k, v in row.items()}
+                        yield idx, norm
+
+                rows_iter = gen_csv()
+            else:
+                import openpyxl
+
+                wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
+                ws = wb.active
+                it = ws.iter_rows(values_only=True)
+                try:
+                    raw_headers = next(it)
+                except StopIteration:
+                    return Response({"detail": "Empty file or missing header"}, status=status.HTTP_400_BAD_REQUEST)
+                headers = [normalize(str(h) if h is not None else "") for h in raw_headers]
+                if not expected.issubset(set(headers)):
+                    return Response({"detail": f"Missing headers: {', '.join(expected - set(headers))}", "expected": sorted(expected)}, status=status.HTTP_400_BAD_REQUEST)
+
+                def gen_xlsx():
+                    for idx, row in enumerate(it, start=2):
+                        norm = {headers[i]: (str(v).strip() if v is not None else "") for i, v in enumerate(row) if i < len(headers)}
+                        yield idx, norm
+
+                rows_iter = gen_xlsx()
+        except Exception as e:
+            return Response({"detail": f"Failed to read file: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        company_cache = {c.name.lower(): c for c in Company.objects.all()}
+        existing = {(c.email.lower(), c.company_id): c for c in Customer.objects.select_related("company").all()}
+        to_create: list[Customer] = []
+        to_update: list[Customer] = []
+        imported = skipped = overwritten = 0
+
+        for idx, row in rows_iter:  # type: ignore
+            company_name = row.get("company", "").strip()
+            name = row.get("name", "").strip()
+            email = row.get("email", "").strip()
+            if not company_name or not name or not email:
+                errors.append({"row": idx, "field": "company/name/email", "message": "company, name, email required"})
+                continue
+            company = company_cache.get(company_name.lower())
+            if not company:
+                company = Company.objects.create(name=company_name)
+                company_cache[company_name.lower()] = company
+            key = (email.lower(), company.id)
+            if key in existing:
+                if on_duplicate == "skip":
+                    skipped += 1
+                    continue
+                cust = existing[key]
+                cust.name = name
+                cust.phone = row.get("phone", "")[:40]
+                cust.address = row.get("address", "")
+                to_update.append(cust)
+                overwritten += 1
+            else:
+                cust = Customer(company=company, name=name, email=email, phone=row.get("phone", "")[:40], address=row.get("address", ""))
+                to_create.append(cust)
+                existing[key] = cust
+
+        with transaction.atomic():
+            if to_create:
+                Customer.objects.bulk_create(to_create, batch_size=500)
+                imported = len(to_create)
+            if to_update:
+                Customer.objects.bulk_update(to_update, ["name", "phone", "address"], batch_size=500)
+
+        return Response({"imported": imported, "overwritten": overwritten, "skipped": skipped, "failed": len(errors), "errors": errors[:100]})
+
+    @action(detail=False, methods=["get"], permission_classes=[IsManagement])
+    def export(self, request):
+        fmt = request.query_params.get("format", "csv")
+        qs = self.filter_queryset(self.get_queryset()).select_related("company").only("name", "email", "phone", "address", "company__name").iterator(chunk_size=500)
+
+        if fmt == "xlsx":
+            import openpyxl
+            from django.http import HttpResponse
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "customers"
+            ws.append(["company", "name", "email", "phone", "address"])
+            for c in qs:
+                ws.append([c.company.name, c.name, c.email, c.phone, c.address])
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
+            return resp
+
+        def gen():
+            yield "company,name,email,phone,address\n"
+            for c in qs:
+                def esc(v: str) -> str:
+                    v = (v or "").replace('"', '""')
+                    return f'"{v}"' if "," in v or '"' in v or "\n" in v else v
+                yield f"{esc(c.company.name)},{esc(c.name)},{esc(c.email)},{esc(c.phone)},{esc(c.address)}\n"
+
+        resp = StreamingHttpResponse(gen(), content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="customers.csv"'
+        return resp
 
 
 class SiteViewSet(viewsets.ModelViewSet):

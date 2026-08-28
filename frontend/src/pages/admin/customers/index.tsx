@@ -18,6 +18,7 @@ import {
 import { CustomerCreateDialog } from './partials/CustomerCreateDialog'
 import { CustomerEditDialog } from './partials/CustomerEditDialog'
 import { CustomerDetailsSheet } from './partials/CustomerDetailsSheet'
+import { CustomerImportDialog } from './partials/CustomerImportDialog'
 
 export function CustomersPage() {
   const [search, setSearch] = useState('')
@@ -38,7 +39,12 @@ export function CustomersPage() {
       <PageHeader
         title="Customers"
         description="Manage customer accounts"
-        action={<CustomerCreateDialog />}
+        action={
+          <div className="flex items-center gap-2">
+            <CustomerImportDialog />
+            <CustomerCreateDialog />
+          </div>
+        }
       />
 
       <Card>
