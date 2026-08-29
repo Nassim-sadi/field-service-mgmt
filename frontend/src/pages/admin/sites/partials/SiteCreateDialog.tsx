@@ -28,6 +28,7 @@ import { api, apiErrorMessage } from '@/lib/api/client'
 import { queryKeys } from '@/lib/api/keys'
 import type { Customer, Paginated, Site } from '@/lib/api/types'
 import { siteSchema, type SiteFormValues } from '../schema'
+import { MapPicker } from '@/components/app/map-picker'
 
 const defaultValues: SiteFormValues = {
   customer: '',
@@ -111,6 +112,19 @@ export function SiteCreateDialog() {
             <FieldContent>
               <Input id="site-name" required {...register('name')} />
               <FieldError errors={errors.name ? [errors.name] : undefined} />
+            </FieldContent>
+          </Field>
+          <Field>
+            <FieldLabel>Location (click map or edit fields)</FieldLabel>
+            <FieldContent>
+              <MapPicker
+                lat={watch('latitude') ? Number(watch('latitude')) : null}
+                lng={watch('longitude') ? Number(watch('longitude')) : null}
+                onChange={(lat, lng) => {
+                  setValue('latitude', String(lat.toFixed(6)))
+                  setValue('longitude', String(lng.toFixed(6)))
+                }}
+              />
             </FieldContent>
           </Field>
           <div className="grid grid-cols-2 gap-4">

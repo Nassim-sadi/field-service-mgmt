@@ -6,6 +6,7 @@ import { lastValueFrom } from 'rxjs';
 import { ApiService, apiErrorMessage } from '../../core/api/api.service';
 import { pagedList } from '../../core/paged-list';
 import { Customer, Paginated, Site } from '../../core/api/types';
+import { MapPickerComponent } from '../../shared/map-picker';
 import {
   ButtonDirective,
   CardComponent,
@@ -83,6 +84,7 @@ const fromSite = (s: Site): SiteForm => ({
     EditActionComponent,
     DialogComponent,
     SheetComponent,
+    MapPickerComponent,
   ],
   template: `
     <div class="space-y-4">
@@ -164,6 +166,10 @@ const fromSite = (s: Site): SiteForm => ({
               <label appLabel for="site-name">Name</label>
               <input appInput id="site-name" required [(ngModel)]="form.name" name="name" />
             </div>
+            <div class="space-y-2">
+              <label appLabel>Location (click map or edit fields)</label>
+              <app-map-picker [lat]="toNumber(form.latitude)" [lng]="toNumber(form.longitude)" (latLngChange)="form.latitude = $event.lat.toFixed(6); form.longitude = $event.lng.toFixed(6)"></app-map-picker>
+            </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-2">
                 <label appLabel for="site-lat">Latitude</label>
@@ -214,6 +220,10 @@ const fromSite = (s: Site): SiteForm => ({
             <div class="space-y-2">
               <label appLabel for="edit-site-name">Name</label>
               <input appInput id="edit-site-name" required [(ngModel)]="form.name" name="name" />
+            </div>
+            <div class="space-y-2">
+              <label appLabel>Location (click map or edit fields)</label>
+              <app-map-picker [lat]="toNumber(form.latitude)" [lng]="toNumber(form.longitude)" (latLngChange)="form.latitude = $event.lat.toFixed(6); form.longitude = $event.lng.toFixed(6)"></app-map-picker>
             </div>
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-2">
@@ -355,6 +365,11 @@ export class SitesComponent {
     return site.latitude != null && site.longitude != null
       ? `${site.latitude}, ${site.longitude}`
       : '—';
+  }
+
+  toNumber(v: string): number | null {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
 
   openCreate(): void {
