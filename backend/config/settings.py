@@ -135,3 +135,11 @@ CORS_ALLOWED_ORIGINS = [
     ).split(",")
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ["X-RAM-Delta", "X-Rows", "Content-Disposition"]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {"core.views": {"handlers": ["console"], "level": "INFO", "propagate": False}},
+}

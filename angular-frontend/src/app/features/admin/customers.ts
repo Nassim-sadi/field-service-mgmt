@@ -85,15 +85,20 @@ const fromCustomer = (c: Customer): CustomerForm => ({
   template: `
     <div class="space-y-4">
       <app-page-header title="Customers" description="Manage customer accounts">
-        <div class="flex items-center gap-2">
-          <button appButton variant="outline" (click)="exportFile('csv')">Export CSV</button>
-          <button appButton variant="outline" (click)="exportFile('xlsx')">Export XLSX</button>
-          <button appButton variant="outline" (click)="importOpen.set(true)">
-            <ng-icon name="upload" size="16" /> Import
-          </button>
-          <button appButton (click)="openCreate()">
-            <ng-icon name="plus" size="16" /> Add customer
-          </button>
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <button appButton variant="outline" (click)="exportFile('csv')">Export CSV</button>
+            <button appButton variant="outline" (click)="exportFile('xlsx')">Export XLSX</button>
+            <button appButton variant="outline" (click)="importOpen.set(true)">
+              <ng-icon name="upload" size="16" /> Import
+            </button>
+            <button appButton (click)="openCreate()">
+              <ng-icon name="plus" size="16" /> Add customer
+            </button>
+          </div>
+          @if (lastExportInfo()) {
+            <span class="text-xs text-muted-foreground">{{ lastExportInfo() }}</span>
+          }
         </div>
       </app-page-header>
 
@@ -307,6 +312,7 @@ export class CustomersComponent {
   protected importOpen = signal(false);
   protected importFile: File | null = null;
   protected importMode: 'skip' | 'overwrite' = 'skip';
+  protected lastExportInfo = signal<string | null>(null);
   protected readonly demoMode = DEMO_MODE;
 
   protected list = pagedList<Customer>({
@@ -429,6 +435,9 @@ export class CustomersComponent {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error('Export failed');
+      const ramDelta = res.headers.get('X-RAM-Delta') ?? res.headers.get('x-ram-delta');
+      const rows = res.headers.get('X-Rows') ?? res.headers.get('x-rows');
+      if (ramDelta) this.lastExportInfo.set(`Last export: ${rows ?? '?'} rows, RAM delta ${ramDelta}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -436,6 +445,7 @@ export class CustomersComponent {
       a.download = `customers.${fmt}`;
       a.click();
       URL.revokeObjectURL(url);
+      if (ramDelta) this.toast.success(`Exported — RAM delta ${ramDelta}`);
     } catch (error) {
       this.toast.error(apiErrorMessage(error));
     }

@@ -166,46 +166,92 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], permission_classes=[IsManagement])
     def export(self, request):
         import logging
-        import psutil
         import os
+        import tempfile
+
+        import psutil
 
         logger = logging.getLogger(__name__)
         proc = psutil.Process(os.getpid())
         rss_before = proc.memory_info().rss / 1024**2
         fmt = request.query_params.get("fmt", request.query_params.get("format", "csv"))
-        qs = self.filter_queryset(self.get_queryset()).select_related("company").only("name", "email", "phone", "address", "company__name").iterator(chunk_size=500)
+        base_qs = self.filter_queryset(self.get_queryset()).select_related("company").only("name", "email", "phone", "address", "company__name")
+        row_count = base_qs.count()
+        qs = base_qs.iterator(chunk_size=500)
 
         if fmt == "xlsx":
             import openpyxl
             from django.http import HttpResponse
 
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "customers"
-            ws.append(["company", "name", "email", "phone", "address"])
-            for c in qs:
-                ws.append([c.company.name, c.name, c.email, c.phone, c.address])
-            buf = io.BytesIO()
-            wb.save(buf)
-            buf.seek(0)
-            resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
-            rss_after = proc.memory_info().rss / 1024**2
-            logger.info(f"export customers fmt={fmt} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB rows buffered")
-            return resp
+            if row_count < 2000:
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "customers"
+                ws.append(["company", "name", "email", "phone", "address"])
+                for c in qs:
+                    ws.append([c.company.name, c.name, c.email, c.phone, c.address])
+                buf = io.BytesIO()
+                wb.save(buf)
+                buf.seek(0)
+                resp = HttpResponse(buf.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
+                rss_after = proc.memory_info().rss / 1024**2
+                delta = rss_after - rss_before
+                logger.info(f"export customers fmt=xlsx small rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+                resp["X-RAM-Delta"] = f"{delta:.1f}MB"
+                resp["X-Rows"] = str(row_count)
+                return resp
+            else:
+                wb = openpyxl.Workbook(write_only=True)
+                ws = wb.create_sheet(title="customers")
+                ws.append(["company", "name", "email", "phone", "address"])
+                for c in qs:
+                    ws.append([c.company.name, c.name, c.email, c.phone, c.address])
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+                try:
+                    wb.save(tmp.name)
+                    tmp.close()
+
+                    def gen_xlsx():
+                        with open(tmp.name, "rb") as f:
+                            while chunk := f.read(8192):
+                                yield chunk
+                        try:
+                            os.unlink(tmp.name)
+                        except OSError:
+                            pass
+                        rss_after = proc.memory_info().rss / 1024**2
+                        delta = rss_after - rss_before
+                        logger.info(f"export customers fmt=xlsx large rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+
+                    resp = StreamingHttpResponse(gen_xlsx(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
+                    resp["X-Rows"] = str(row_count)
+                    return resp
+                except Exception:
+                    try:
+                        os.unlink(tmp.name)
+                    except OSError:
+                        pass
+                    raise
 
         def gen():
-            yield "company,name,email,phone,address\n"
+            yield "\ufeffcompany,name,email,phone,address\n"
             for c in qs:
                 def esc(v: str) -> str:
                     v = (v or "").replace('"', '""')
                     return f'"{v}"' if "," in v or '"' in v or "\n" in v else v
                 yield f"{esc(c.company.name)},{esc(c.name)},{esc(c.email)},{esc(c.phone)},{esc(c.address)}\n"
 
-        resp = StreamingHttpResponse(gen(), content_type="text/csv")
+        def gen_with_log():
+            yield from gen()
+            rss_after = proc.memory_info().rss / 1024**2
+            delta = rss_after - rss_before
+            logger.info(f"export customers fmt=csv rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+
+        resp = StreamingHttpResponse(gen_with_log(), content_type="text/csv; charset=utf-8")
         resp["Content-Disposition"] = 'attachment; filename="customers.csv"'
-        rss_after = proc.memory_info().rss / 1024**2
-        logger.info(f"export customers fmt={fmt} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB")
+        resp["X-Rows"] = str(row_count)
         return resp
 
 
