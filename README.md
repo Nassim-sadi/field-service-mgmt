@@ -105,18 +105,25 @@ npm run lint
 
 ## Performance showcase — normal vs optimised export
 
-| Format | 20k rows | Normal (`list`+`HttpResponse`) | Optimised (`iterator`+`StreamingHttpResponse`) |
-| ------ | -------- | ------------------------------ | --------------------------------------------- |
-| CSV | 2.7MB file | `45.2MB` RAM delta (buffered) | `0.1MB` RAM delta (streaming, `O(500)`) |
-| XLSX | — | buffered `Workbook`+`BytesIO` | `write_only`+`tempfile` streaming for ≥2000 rows |
+| Rows | File | Normal (`list`+`HttpResponse`) | Optimised (`iterator`+`StreamingHttpResponse`) |
+| ---- | ---- | ------------------------------ | --------------------------------------------- |
+| **20k** | CSV 2.7MB | `45.2MB` RAM delta (buffered) | `0.5MB` RAM delta (streaming, `O(500)`) |
+| **2M** | CSV 280MB | `4479.2MB` RAM delta (4.4GB, buffered) | `0.5MB` RAM delta (streaming, `O(500)`) |
 
-Headers `X-RAM-Delta`/`X-Rows`/`X-Mode` exposed via `CORS_EXPOSE_HEADERS`, logged via `psutil` + `LOGGING` to `error.log`. Compare `GET /api/customers/export/?fmt=csv` vs `/export-normal/?fmt=csv` side-by-side on Customers admin (4 buttons).
+> **Logged locally 29 Aug 2026:** `export customers fmt=csv rows=2000004 rss_before=73.5MB rss_after=74.1MB delta=0.5MB` vs `export NORMAL fmt=csv rows=2000004 rss_before=74.0MB rss_after=4553.2MB delta=4479.2MB` — **~9000× less RAM**. Same data, `yield` vs `list`.
+>
+> XLSX: buffered `Workbook`+`BytesIO` vs `write_only`+`tempfile` streaming for ≥2000 rows.
+
+Headers `X-RAM-Delta`/`X-Rows`/`X-Mode` exposed via `CORS_EXPOSE_HEADERS` and shown under Export buttons (size, time, RAM). Logged via `psutil` + `LOGGING` to `error.log`. Compare `GET /api/customers/export/?fmt=csv` vs `/export-normal/?fmt=csv` side-by-side on Customers admin (4 buttons).
 
 Local 2M test:
 
 ```bash
-python manage.py seed_large --count 2000000 --batch 1000 --reset  # ~3-4 min, ~1GB disk, O(500) RAM
-# then export both and watch header deltas: optimised ~1MB vs normal OOM
+python manage.py seed_large --count 2000000 --batch 1000 --reset  # ~3-4 min, ~1GB disk, O(500) RAM, Algerian demo kept
+# then in Customers admin: Export CSV (optimised) vs (normal) — watch RAM delta
+# or curl:
+# curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/customers/export/?fmt=csv" -o /tmp/opt.csv -i | grep X-RAM
+# curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/customers/export-normal/?fmt=csv" -o /tmp/normal.csv -i | grep X-RAM
 ```
 
 ## Environment variables (backend)
