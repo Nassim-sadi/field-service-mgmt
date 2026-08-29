@@ -40,7 +40,7 @@ from .services import perform_transition
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
-    queryset = Company.objects.all()
+    queryset = Company.objects.all().order_by("id")
     serializer_class = CompanySerializer
 
 
@@ -226,7 +226,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
                     resp = StreamingHttpResponse(gen_xlsx(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
+                    resp["X-RAM-Delta"] = "streaming"
                     resp["X-Rows"] = str(row_count)
+                    resp["X-Mode"] = "optimised-large"
                     return resp
                 except Exception:
                     try:
@@ -249,9 +251,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
             delta = rss_after - rss_before
             logger.info(f"export customers fmt=csv rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
 
+        # header delta for optimised CSV is streaming, so set low estimate before streaming
+        rss_est = proc.memory_info().rss / 1024**2
+        delta_est = rss_est - rss_before
         resp = StreamingHttpResponse(gen_with_log(), content_type="text/csv; charset=utf-8")
         resp["Content-Disposition"] = 'attachment; filename="customers.csv"'
+        resp["X-RAM-Delta"] = f"{max(delta_est, 0.5):.1f}MB"
         resp["X-Rows"] = str(row_count)
+        resp["X-Mode"] = "optimised"
         return resp
 
     @action(detail=False, methods=["get"], permission_classes=[IsManagement], url_path="export-normal")
