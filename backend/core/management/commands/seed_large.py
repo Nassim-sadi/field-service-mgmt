@@ -18,25 +18,27 @@ class Command(BaseCommand):
         reset = options["reset"]
 
         if reset:
-            deleted, _ = Customer.objects.all().delete()
-            self.stdout.write(f"Deleted {deleted} existing customers")
+            deleted, _ = Customer.objects.filter(name__startswith="Client Demo").delete()
+            self.stdout.write(f"Deleted {deleted} demo customers (Algerian linked kept)")
 
         company, _ = Company.objects.get_or_create(
             name="SARL Maintenance & Services Algérie",
             defaults=dict(contact_name="Karim Benali", contact_email="contact@msa.dz", contact_phone="+213 550 12 34 56", address="Cité 20 Août 1956, Bab Ezzouar, Alger"),
         )
 
-        existing = Customer.objects.count()
-        to_create = count - existing if not reset else count
+        existing_demo = Customer.objects.filter(name__startswith="Client Demo").count()
+        existing_total = Customer.objects.count()
+        to_create = count - existing_demo if not reset else count
         if to_create <= 0:
-            self.stdout.write(f"Already have {existing} customers, use --reset or --count {existing + count}")
+            self.stdout.write(f"Already have {existing_demo} demo customers ({existing_total} total), use --reset or --count {existing_demo + count}")
             return
 
-        self.stdout.write(f"Seeding {to_create} customers in batches of {batch} (generator + bulk_create)...")
+        self.stdout.write(f"Seeding {to_create} customers in batches of {batch} (generator + bulk_create, demo only)...")
 
         def gen_customers(n):
-            for i in range(1, n + 1):
-                idx = existing + i
+            start = existing_demo + 1 if not reset else 1
+            for i in range(n):
+                idx = start + i
                 yield Customer(
                     company=company,
                     name=f"Client Demo {idx:05d}",
@@ -60,4 +62,4 @@ class Command(BaseCommand):
                 Customer.objects.bulk_create(batch_buf, batch_size=batch)
             created += len(batch_buf)
 
-        self.stdout.write(self.style.SUCCESS(f"Done. Total customers: {Customer.objects.count()} (created {created})"))
+        self.stdout.write(self.style.SUCCESS(f"Done. Total customers: {Customer.objects.count()} (demo {Customer.objects.filter(name__startswith='Client Demo').count()}, created {created})"))
