@@ -27,15 +27,19 @@ on the frontend.
 - Confirmation dialogs before all work order state transitions (assign, accept, start, complete).
 - Color-coded role badges (Admin, Manager, Technician, Customer).
 - Audit logging of every work order state transition.
-- Demo seed data with Algerian companies, customers, technicians, tools and locations.
+ - Demo seed data with Algerian companies, customers, technicians, tools and locations.
 - Public marketing page with a "Report a problem" service request form.
+- **Import/Export with generators** — `POST /api/customers/import/` (CSV+XLSX, header validation, company by name, dup skip/overwrite, `bulk_create` + `iterator`) and `GET /api/customers/export/?fmt=csv|xlsx` streaming via `iterator(chunk_size=500)` + `StreamingHttpResponse` (vs `export-normal` buffered `list()` for side-by-side RAM comparison).
+- **Demo mode** — `netlify.app` hostname → `DEMO_MODE` (React `lib/demo.ts`, Angular `core/demo.ts`): `POST/PATCH/DELETE` mocked locally via in-memory overlay, `GET` real; refresh restores DB. Import blocked on demo (`403`), export live.
+- **Map picker for sites** — create/edit site via Leaflet click/drag (`MapPicker`), not typing `latitude`/`longitude`, editable fields sync both ways.
+- **Field map** — dashboard shows **technicians (blue) + sites (red)** with toggle, not technicians only.
 
 ## Stack
 
 | Layer    | Tech                                                                  |
 | -------- | --------------------------------------------------------------------- |
-| Backend  | Python, Django, Django REST Framework, PostgreSQL, SimpleJWT, django-filter, drf-spectacular |
-| Frontend | React 19, Vite, TypeScript, React Router, Tailwind CSS v4, shadcn/ui, TanStack Query, Recharts, react-leaflet |
+| Backend  | Python, Django, Django REST Framework, PostgreSQL, SimpleJWT, django-filter, drf-spectacular, openpyxl, psutil |
+| Frontend | React 19, Vite, TypeScript, React Router, Tailwind CSS v4, shadcn/ui, TanStack Query, Recharts, react-leaflet, Angular 22 (second SPA) + Tailwind v4 |
 
 ## Prerequisites
 
@@ -56,7 +60,8 @@ pip install -r requirements.txt
 #   DJANGO_SECRET_KEY=...  (a random one is used if unset)
 
 python manage.py migrate
-python manage.py seed_demo        # optional: demo data, admin/adminpass123
+python manage.py seed_demo        # optional: Algerian demo (admin/adminpass123, 4 customers+8 sites+30 WOs)
+python manage.py seed_large --count 20000 --batch 500  # 20k customers via generator + bulk_create (2M: --count 2000000 --batch 1000)
 python manage.py runserver
 ```
 
@@ -80,6 +85,14 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
+```bash
+cd angular-frontend
+npm install
+npm run start      # ng serve http://localhost:4200
+```
+
+Local dev needs no `VITE_API_URL` — React falls back to `http://localhost:8000/api`, Angular uses `environment.ts`. On Netlify `*.netlify.app` hostname triggers `DEMO_MODE` (local-only mutations, import blocked).
+
 Set `VITE_API_URL` (defaults to `http://localhost:8000/api`) if the backend is
 not on `localhost:8000`.
 
@@ -88,6 +101,22 @@ Build / lint:
 ```bash
 npm run build      # tsc -b + vite build
 npm run lint
+```
+
+## Performance showcase — normal vs optimised export
+
+| Format | 20k rows | Normal (`list`+`HttpResponse`) | Optimised (`iterator`+`StreamingHttpResponse`) |
+| ------ | -------- | ------------------------------ | --------------------------------------------- |
+| CSV | 2.7MB file | `45.2MB` RAM delta (buffered) | `0.1MB` RAM delta (streaming, `O(500)`) |
+| XLSX | — | buffered `Workbook`+`BytesIO` | `write_only`+`tempfile` streaming for ≥2000 rows |
+
+Headers `X-RAM-Delta`/`X-Rows`/`X-Mode` exposed via `CORS_EXPOSE_HEADERS`, logged via `psutil` + `LOGGING` to `error.log`. Compare `GET /api/customers/export/?fmt=csv` vs `/export-normal/?fmt=csv` side-by-side on Customers admin (4 buttons).
+
+Local 2M test:
+
+```bash
+python manage.py seed_large --count 2000000 --batch 1000 --reset  # ~3-4 min, ~1GB disk, O(500) RAM
+# then export both and watch header deltas: optimised ~1MB vs normal OOM
 ```
 
 ## Environment variables (backend)
@@ -99,8 +128,10 @@ npm run lint
 | `DB_PASSWORD`        | `fieldservice_dev_pass`  | Postgres password    |
 | `DB_HOST`            | `localhost`              | Postgres host        |
 | `DB_PORT`            | `5432`                   | Postgres port        |
+| `DB_ENGINE`          | `postgres`               | `postgres` or `sqlite` (PythonAnywhere free) |
 | `DJANGO_SECRET_KEY`  | random                   | Django secret key    |
 | `DJANGO_DEBUG`       | `true`                   | Debug mode           |
+| `CORS_ALLOWED_ORIGINS` | `localhost:5173,4200`  | Allowed origins (add Netlify URLs) |
 
 ## State transitions (API)
 
