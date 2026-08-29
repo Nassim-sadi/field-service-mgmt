@@ -87,10 +87,34 @@ const fromCustomer = (c: Customer): CustomerForm => ({
       <app-page-header title="Customers" description="Manage customer accounts">
         <div class="flex flex-col gap-1">
           <div class="flex flex-wrap items-center gap-2">
-            <button appButton variant="outline" (click)="exportFile('csv', 'optimised')">Export CSV (optimised)</button>
-            <button appButton variant="secondary" (click)="exportFile('csv', 'normal')">Export CSV (normal)</button>
-            <button appButton variant="outline" (click)="exportFile('xlsx', 'optimised')">Export XLSX (optimised)</button>
-            <button appButton variant="secondary" (click)="exportFile('xlsx', 'normal')">Export XLSX (normal)</button>
+            <button appButton variant="outline" [disabled]="!!exporting()" (click)="exportFile('csv', 'optimised')">
+              @if (exporting() === 'optimised-csv') {
+                Exporting…
+              } @else {
+                Export CSV (optimised)
+              }
+            </button>
+            <button appButton variant="secondary" [disabled]="!!exporting()" (click)="exportFile('csv', 'normal')">
+              @if (exporting() === 'normal-csv') {
+                Exporting…
+              } @else {
+                Export CSV (normal)
+              }
+            </button>
+            <button appButton variant="outline" [disabled]="!!exporting()" (click)="exportFile('xlsx', 'optimised')">
+              @if (exporting() === 'optimised-xlsx') {
+                Exporting…
+              } @else {
+                Export XLSX (optimised)
+              }
+            </button>
+            <button appButton variant="secondary" [disabled]="!!exporting()" (click)="exportFile('xlsx', 'normal')">
+              @if (exporting() === 'normal-xlsx') {
+                Exporting…
+              } @else {
+                Export XLSX (normal)
+              }
+            </button>
             <button appButton variant="outline" (click)="importOpen.set(true)">
               <ng-icon name="upload" size="16" /> Import
             </button>
@@ -98,6 +122,11 @@ const fromCustomer = (c: Customer): CustomerForm => ({
               <ng-icon name="plus" size="16" /> Add customer
             </button>
           </div>
+          @if (exporting()) {
+            <div class="h-1.5 w-full overflow-hidden rounded bg-muted">
+              <div class="h-full bg-primary transition-all" [style.width.%]="exportProgress() ?? 50"></div>
+            </div>
+          }
           <div class="flex flex-col text-xs text-muted-foreground">
             @if (lastExportOptimised()) {
               <span>{{ lastExportOptimised() }}</span>
@@ -105,8 +134,11 @@ const fromCustomer = (c: Customer): CustomerForm => ({
             @if (lastExportNormal()) {
               <span>{{ lastExportNormal() }}</span>
             }
-            @if (!lastExportOptimised() && !lastExportNormal()) {
+            @if (!lastExportOptimised() && !lastExportNormal() && !exporting()) {
               <span class="opacity-60">Export to see RAM delta — compare streaming vs buffered.</span>
+            }
+            @if (exporting()) {
+              <span class="opacity-60">Exporting {{ exporting() }}… {{ exportProgress() != null ? exportProgress() + '%' : 'streaming…' }}</span>
             }
           </div>
         </div>
@@ -324,6 +356,8 @@ export class CustomersComponent {
   protected importMode: 'skip' | 'overwrite' = 'skip';
   protected lastExportOptimised = signal<string | null>(null);
   protected lastExportNormal = signal<string | null>(null);
+  protected exporting = signal<string | null>(null);
+  protected exportProgress = signal<number | null>(null);
   protected readonly demoMode = DEMO_MODE;
 
   protected list = pagedList<Customer>({
@@ -440,6 +474,10 @@ export class CustomersComponent {
   }
 
   async exportFile(fmt: 'csv' | 'xlsx', mode: 'optimised' | 'normal' = 'optimised'): Promise<void> {
+    const key = `${mode}-${fmt}`;
+    this.exporting.set(key);
+    this.exportProgress.set(0);
+    const start = performance.now();
     try {
       const token = tokenStore.getAccess();
       const path = mode === 'normal' ? `/customers/export-normal/?fmt=${fmt}` : `/customers/export/?fmt=${fmt}`;
@@ -449,19 +487,42 @@ export class CustomersComponent {
       if (!res.ok) throw new Error('Export failed');
       const ramDelta = res.headers.get('X-RAM-Delta') ?? res.headers.get('x-ram-delta');
       const rows = res.headers.get('X-Rows') ?? res.headers.get('x-rows');
-      const label = `${mode === 'normal' ? 'Normal' : 'Optimised'}: ${rows ?? '?'} rows, RAM ${ramDelta ?? 'n/a'} (${fmt})`;
+      const total = Number(res.headers.get('Content-Length') ?? 0);
+      let blob: Blob;
+      if (res.body && total) {
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          this.exportProgress.set(Math.round((received / total) * 100));
+        }
+        blob = new Blob(chunks as BlobPart[]);
+      } else {
+        // streaming without Content-Length — indeterminate
+        this.exportProgress.set(null);
+        blob = await res.blob();
+      }
+      const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+      const secs = ((performance.now() - start) / 1000).toFixed(1);
+      const label = `${mode === 'normal' ? 'Normal' : 'Optimised'}: ${rows ?? '?'} rows, ${sizeMB}MB, ${secs}s, RAM ${ramDelta ?? 'n/a'} (${fmt})`;
       if (mode === 'normal') this.lastExportNormal.set(label);
       else this.lastExportOptimised.set(label);
-      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `customers-${mode}.${fmt}`;
       a.click();
       URL.revokeObjectURL(url);
-      if (ramDelta) this.toast.success(`${mode === 'normal' ? 'Normal' : 'Optimised'} — RAM ${ramDelta}`);
+      if (ramDelta) this.toast.success(`${mode === 'normal' ? 'Normal' : 'Optimised'} — ${sizeMB}MB in ${secs}s, RAM ${ramDelta}`);
     } catch (error) {
       this.toast.error(apiErrorMessage(error));
+    } finally {
+      this.exporting.set(null);
+      this.exportProgress.set(null);
     }
   }
 }
