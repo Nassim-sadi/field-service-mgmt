@@ -254,6 +254,64 @@ class CustomerViewSet(viewsets.ModelViewSet):
         resp["X-Rows"] = str(row_count)
         return resp
 
+    @action(detail=False, methods=["get"], permission_classes=[IsManagement], url_path="export-normal")
+    def export_normal(self, request):
+        import csv
+        import logging
+        import os
+
+        import psutil
+
+        logger = logging.getLogger(__name__)
+        proc = psutil.Process(os.getpid())
+        rss_before = proc.memory_info().rss / 1024**2
+        fmt = request.query_params.get("fmt", request.query_params.get("format", "csv"))
+        qs = self.filter_queryset(self.get_queryset()).select_related("company")
+        customers = list(qs)
+        row_count = len(customers)
+
+        if fmt == "xlsx":
+            import openpyxl
+            from django.http import HttpResponse
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "customers"
+            ws.append(["company", "name", "email", "phone", "address"])
+            for c in customers:
+                ws.append([c.company.name, c.name, c.email, c.phone, c.address])
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            data = buf.read()
+            rss_after = proc.memory_info().rss / 1024**2
+            delta = rss_after - rss_before
+            logger.info(f"export NORMAL fmt=xlsx rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+            resp = HttpResponse(data, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="customers-normal.xlsx"'
+            resp["X-RAM-Delta"] = f"{delta:.1f}MB"
+            resp["X-Rows"] = str(row_count)
+            resp["X-Mode"] = "normal"
+            return resp
+
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(["company", "name", "email", "phone", "address"])
+        for c in customers:
+            writer.writerow([c.company.name, c.name, c.email, c.phone, c.address])
+        csv_data = "\ufeff" + output.getvalue()
+        rss_after = proc.memory_info().rss / 1024**2
+        delta = rss_after - rss_before
+        logger.info(f"export NORMAL fmt=csv rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+        from django.http import HttpResponse
+
+        resp = HttpResponse(csv_data, content_type="text/csv; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="customers-normal.csv"'
+        resp["X-RAM-Delta"] = f"{delta:.1f}MB"
+        resp["X-Rows"] = str(row_count)
+        resp["X-Mode"] = "normal"
+        return resp
+
 
 class SiteViewSet(viewsets.ModelViewSet):
     queryset = Site.objects.select_related("customer").all()

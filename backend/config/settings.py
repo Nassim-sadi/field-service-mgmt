@@ -135,7 +135,7 @@ CORS_ALLOWED_ORIGINS = [
     ).split(",")
 ]
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ["X-RAM-Delta", "X-Rows", "Content-Disposition"]
+CORS_EXPOSE_HEADERS = ["X-RAM-Delta", "X-Rows", "X-Mode", "Content-Disposition"]
 
 LOGGING = {
     "version": 1,

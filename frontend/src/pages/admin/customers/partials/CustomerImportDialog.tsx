@@ -24,7 +24,8 @@ export function CustomerImportDialog() {
   const [file, setFile] = useState<File | null>(null)
   const [mode, setMode] = useState<'skip' | 'overwrite'>('skip')
   const [loading, setLoading] = useState(false)
-  const [lastExportInfo, setLastExportInfo] = useState<string | null>(null)
+  const [lastExportOptimised, setLastExportOptimised] = useState<string | null>(null)
+  const [lastExportNormal, setLastExportNormal] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   const onImport = async () => {
@@ -65,20 +66,23 @@ export function CustomerImportDialog() {
     }
   }
 
-  const onExport = async (fmt: 'csv' | 'xlsx') => {
+  const onExport = async (fmt: 'csv' | 'xlsx', mode: 'optimised' | 'normal' = 'optimised') => {
     try {
-      const res = await api.get(`/customers/export/?fmt=${fmt}`, { responseType: 'blob' })
+      const path = mode === 'normal' ? `/customers/export-normal/?fmt=${fmt}` : `/customers/export/?fmt=${fmt}`
+      const res = await api.get(path, { responseType: 'blob' })
       const blob = res.data as unknown as Blob
       const ramDelta = (res.headers as Record<string, string>)['x-ram-delta'] ?? (res.headers as Record<string, string>)['X-RAM-Delta']
       const rows = (res.headers as Record<string, string>)['x-rows'] ?? (res.headers as Record<string, string>)['X-Rows']
-      if (ramDelta) setLastExportInfo(`Last export: ${rows ?? '?'} rows, RAM delta ${ramDelta}`)
+      const label = `${mode === 'normal' ? 'Normal' : 'Optimised'}: ${rows ?? '?'} rows, RAM ${ramDelta ?? 'n/a'} (${fmt})`
+      if (mode === 'normal') setLastExportNormal(label)
+      else setLastExportOptimised(label)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `customers.${fmt}`
+      a.download = `customers-${mode}.${fmt}`
       a.click()
       URL.revokeObjectURL(url)
-      if (ramDelta) toast.success(`Exported — RAM delta ${ramDelta}`)
+      if (ramDelta) toast.success(`${mode === 'normal' ? 'Normal' : 'Optimised'} — RAM ${ramDelta}`)
     } catch {
       toast.error('Export failed')
     }
@@ -86,12 +90,18 @@ export function CustomerImportDialog() {
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => onExport('csv')}>
-          <Download /> Export CSV
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => onExport('csv', 'optimised')}>
+          <Download /> Export CSV (optimised)
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onExport('xlsx')}>
-          <Download /> Export XLSX
+        <Button variant="secondary" size="sm" onClick={() => onExport('csv', 'normal')}>
+          <Download /> Export CSV (normal)
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => onExport('xlsx', 'optimised')}>
+          <Download /> Export XLSX (optimised)
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => onExport('xlsx', 'normal')}>
+          <Download /> Export XLSX (normal)
         </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button variant="outline" size="sm" />}>
@@ -132,7 +142,11 @@ export function CustomerImportDialog() {
           </DialogContent>
         </Dialog>
       </div>
-      {lastExportInfo && <span className="text-xs text-muted-foreground">{lastExportInfo}</span>}
+      <div className="flex flex-col text-xs text-muted-foreground">
+        {lastExportOptimised && <span>{lastExportOptimised}</span>}
+        {lastExportNormal && <span>{lastExportNormal}</span>}
+        {!lastExportOptimised && !lastExportNormal && <span className="opacity-60">Export to see RAM delta — compare streaming vs buffered.</span>}
+      </div>
     </div>
   )
 }
