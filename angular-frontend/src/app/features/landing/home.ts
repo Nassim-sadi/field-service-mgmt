@@ -64,6 +64,16 @@ const features: Feature[] = [
     title: 'Role-based access',
     description: 'Admin, manager, technician, and customer roles control exactly who does what.',
   },
+  {
+    icon: 'upload',
+    title: 'Excel/CSV import & export',
+    description: 'Import 20k customers via streaming (CSV+XLSX, header validation, dup skip/overwrite) and export 2M rows with 0.5MB vs 4.4GB RAM comparison.',
+  },
+  {
+    icon: 'globe',
+    title: 'Demo mode + streaming',
+    description: 'Netlify demo runs local-only mutations (refresh restores) and shows live RAM delta via psutil + StreamingHttpResponse.',
+  },
 ];
 
 const steps = [
@@ -190,9 +200,15 @@ const priorities: { value: WorkOrderPriority; label: string }[] = [
                 Run every field job from <span class="text-yellow-500">report to resolution</span>
               </h1>
               <p class="mt-6 max-w-xl text-lg text-muted-foreground">
-                Dispatch technicians, manage work orders, track inventory, and keep every customer
-                site running — all from one place.
+                Dispatch technicians by skill and proximity, run work orders through an audited lifecycle, track parts and inventory, map every site, and import/export millions of customers via streaming — all from one place. Built for Algerian field teams, scales to 2M+ records.
               </p>
+              <div class="mt-4 flex max-w-xl flex-wrap gap-2 text-xs font-medium text-muted-foreground">
+                <span class="rounded-full bg-muted px-2.5 py-1">Work orders + SLA</span>
+                <span class="rounded-full bg-muted px-2.5 py-1">Technicians + sites map</span>
+                <span class="rounded-full bg-muted px-2.5 py-1">CSV/XLSX import/export</span>
+                <span class="rounded-full bg-muted px-2.5 py-1">RBAC + audit log</span>
+                <span class="rounded-full bg-muted px-2.5 py-1">Generator streaming (0.5MB vs 4.4GB)</span>
+              </div>
               <div class="mt-8 flex flex-wrap gap-3">
                 @if (user()) {
                   <a appButton size="lg" routerLink="/admin" class="bg-yellow-400 text-yellow-950 hover:bg-yellow-300">

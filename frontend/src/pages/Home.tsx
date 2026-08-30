@@ -14,6 +14,7 @@ import {
   Quote,
   ShieldCheck,
   Star,
+  Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -99,6 +100,16 @@ const features = [
     icon: ShieldCheck,
     title: 'Role-based access',
     description: 'Admin, manager, technician, and customer roles control exactly who does what.',
+  },
+  {
+    icon: Upload,
+    title: 'Excel/CSV import & export',
+    description: 'Import 20k customers via streaming (CSV+XLSX, header validation, dup skip/overwrite) and export 2M rows with 0.5MB vs 4.4GB RAM comparison.',
+  },
+  {
+    icon: Globe,
+    title: 'Demo mode + streaming',
+    description: 'Netlify demo runs local-only mutations (refresh restores) and shows live RAM delta via psutil + StreamingHttpResponse.',
   },
 ]
 
@@ -251,9 +262,17 @@ export function Home() {
               <span className="text-yellow-500">report to resolution</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-              Dispatch technicians, manage work orders, track inventory, and keep
-              every customer site running — all from one place.
+              Dispatch technicians by skill and proximity, run work orders through an audited
+              lifecycle, track parts and inventory, map every site, and import/export millions of
+              customers via streaming — all from one place. Built for Algerian field teams, scales to 2M+ records.
             </p>
+            <ul className="mt-4 flex max-w-xl flex-wrap gap-2 text-xs font-medium text-muted-foreground">
+              <li className="rounded-full bg-muted px-2.5 py-1">Work orders + SLA</li>
+              <li className="rounded-full bg-muted px-2.5 py-1">Technicians + sites map</li>
+              <li className="rounded-full bg-muted px-2.5 py-1">CSV/XLSX import/export</li>
+              <li className="rounded-full bg-muted px-2.5 py-1">RBAC + audit log</li>
+              <li className="rounded-full bg-muted px-2.5 py-1">Generator streaming (0.5MB vs 4.4GB)</li>
+            </ul>
             <div className="mt-8 flex flex-wrap gap-3">
               {user ? (
                 <Button
