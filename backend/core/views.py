@@ -45,7 +45,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.select_related("company").all()
+    queryset = Customer.objects.select_related("company").all().order_by("id")
     serializer_class = CustomerSerializer
     filterset_fields = ["company"]
     search_fields = ["name", "email", "phone"]
@@ -213,16 +213,21 @@ class CustomerViewSet(viewsets.ModelViewSet):
                     tmp.close()
 
                     def gen_xlsx():
-                        with open(tmp.name, "rb") as f:
-                            while chunk := f.read(8192):
-                                yield chunk
                         try:
-                            os.unlink(tmp.name)
-                        except OSError:
-                            pass
-                        rss_after = proc.memory_info().rss / 1024**2
-                        delta = rss_after - rss_before
-                        logger.info(f"export customers fmt=xlsx large rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+                            with open(tmp.name, "rb") as f:
+                                while chunk := f.read(8192):
+                                    yield chunk
+                        finally:
+                            try:
+                                os.unlink(tmp.name)
+                            except OSError:
+                                pass
+                            try:
+                                rss_after = proc.memory_info().rss / 1024**2
+                                delta = rss_after - rss_before
+                                logger.info(f"export customers fmt=xlsx large rows={row_count} rss_before={rss_before:.1f}MB rss_after={rss_after:.1f}MB delta={delta:.1f}MB")
+                            except Exception:
+                                pass
 
                     resp = StreamingHttpResponse(gen_xlsx(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     resp["Content-Disposition"] = 'attachment; filename="customers.xlsx"'
